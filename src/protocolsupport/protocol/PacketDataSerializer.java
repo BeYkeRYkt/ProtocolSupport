@@ -12,7 +12,12 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -54,7 +59,6 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 	public void setVersion(ProtocolVersion version) {
 		this.version = version;
 	}
-
 
 	@SuppressWarnings("deprecation")
 	@Override
@@ -104,7 +108,30 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 					}
 				}
 			}
-			a(nbttagcompound);
+			this.a(nbttagcompound);
+		}
+	}
+
+	@Override
+	public ItemStack i() throws IOException {
+		switch (getVersion()) {
+			case MINECRAFT_PE: {
+				int id = readShort();
+				if (id <= 0) {
+					return null;
+				}
+				int count = readByte();
+				int data = readShort();
+				ItemStack itemstack = new ItemStack(Item.getById(id), count, data);
+				itemstack.setTag(h());
+				if (itemstack.getTag() != null) {
+					CraftItemStack.setItemMeta(itemstack, CraftItemStack.getItemMeta(itemstack));
+				}
+				return itemstack;
+			}
+			default: {
+				return super.i();
+			}
 		}
 	}
 
@@ -130,7 +157,7 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 			if (nbttagcompound == null) {
 				writeShort(-1);
 			} else {
-				byte[] abyte = write(nbttagcompound);
+				final byte[] abyte = write(nbttagcompound);
 				writeShort(abyte.length);
 				writeBytes(abyte);
 			}
@@ -167,15 +194,15 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 			if (length < 0) {
 				return null;
 			}
-			final byte[] data = new byte[length];
-			readBytes(data);
-			return read(data, new NBTReadLimiter(2097152L));
+			final byte[] abyte = new byte[length];
+			this.readBytes(abyte);
+			return read(abyte, new NBTReadLimiter(2097152L));
 		} else {
-			int index = readerIndex();
+			final int index = this.readerIndex();
 			if (readByte() == 0) {
 				return null;
 			}
-			readerIndex(index);
+			this.readerIndex(index);
 			return NBTCompressedStreamTools.a(new DataInputStream(new ByteBufInputStream(this)), new NBTReadLimiter(2097152L));
 		}
 	}
@@ -187,6 +214,9 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 			case MINECRAFT_1_6_2:
 			case MINECRAFT_1_5_2: {
 				return new String(Utils.toArray(readBytes(readUnsignedShort() * 2)), StandardCharsets.UTF_16BE);
+			}
+			case MINECRAFT_PE: {
+				return new String(Utils.toArray(readBytes(readUnsignedShort())), StandardCharsets.UTF_8);
 			}
 			default: {
 				return super.c(limit);
@@ -203,6 +233,10 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 				writeShort(string.length());
 				writeBytes(string.getBytes(StandardCharsets.UTF_16BE));
 				break;
+			}
+			case MINECRAFT_PE: {
+				writeShort(string.length());
+				writeBytes(string.getBytes(StandardCharsets.UTF_8));
 			}
 			default: {
 				super.a(string);
@@ -260,6 +294,10 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 		b(varInt);
 	}
 
+	public String readString() {
+		return readString(Short.MAX_VALUE);
+	}
+
 	public String readString(int limit) {
 		return c(limit);
 	}
@@ -278,6 +316,48 @@ public class PacketDataSerializer extends net.minecraft.server.v1_8_R3.PacketDat
 
 	public byte[] readArray() {
 		return a();
+	}
+
+	public UUID readUUID() {
+		return g();
+	}
+
+	public void writeUUID(UUID uuid) {
+		a(uuid);
+	}
+
+	public int readLTriad() {
+		return readUnsignedByte() | (readUnsignedByte() << 8) | (readUnsignedByte() << 16);
+	}
+
+	public void writeLTriad(int triad) {
+		writeByte(triad & 0x0000FF);
+		writeByte((triad & 0x00FF00) >> 8);
+		writeByte((triad & 0xFF0000) >> 16);
+	}
+
+	public InetSocketAddress readAddress() throws UnknownHostException {
+		byte[] addr = null;
+		int type = readByte();
+		if ((type & 0xFF) == 4) {
+			addr = readBytes(4).array();
+		} else {
+			throw new RuntimeException("IPV6 is not supported yet");
+		}
+		int port = readUnsignedShort();
+        return new InetSocketAddress(InetAddress.getByAddress(addr), port);
+	}
+
+	public void writeAddress(InetSocketAddress address) {
+		InetAddress addr = address.getAddress();
+		if (addr instanceof Inet4Address) {
+			writeByte((byte) 4);
+			byte[] data = addr.getAddress();
+			writeInt((data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]);
+			writeShort(address.getPort());
+		} else {
+			throw new RuntimeException("IPV6 is not supported yet");
+		}
 	}
 
 	private static NBTTagCompound read(final byte[] data, final NBTReadLimiter nbtreadlimiter) {
