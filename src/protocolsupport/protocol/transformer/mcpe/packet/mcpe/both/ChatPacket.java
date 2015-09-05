@@ -41,6 +41,7 @@ public class ChatPacket implements DualPEPacket {
 		switch (type) {
 			case CHAT: {
 				source = serializer.readString();
+				message = serializer.readString();
 				break;
 			}
 			case POPUP:
@@ -69,6 +70,7 @@ public class ChatPacket implements DualPEPacket {
 		switch (type) {
 			case CHAT: {
 				serializer.writeString(source);
+				serializer.writeString(message);
 				break;
 			}
 			case RAW:
@@ -91,7 +93,7 @@ public class ChatPacket implements DualPEPacket {
 
 	@Override
 	public List<PacketPlayInChat> transfrom() {
-		return Collections.singletonList(new PacketPlayInChat(source));
+		return Collections.singletonList(new PacketPlayInChat(message));
 	}
 
 
