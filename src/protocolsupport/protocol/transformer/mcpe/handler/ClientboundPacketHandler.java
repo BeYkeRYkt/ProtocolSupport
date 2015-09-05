@@ -20,6 +20,7 @@ import protocolsupport.protocol.transformer.mcpe.UDPNetworkManager;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.ClientboundPEPacket;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.both.ChatPacket;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.both.MovePlayerPacket;
+import protocolsupport.protocol.transformer.mcpe.packet.mcpe.both.RespawnPacket;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.both.SetHealthPacket;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.clientbound.ChunkPacket;
 import protocolsupport.protocol.transformer.mcpe.packet.mcpe.clientbound.PlayerListPacket;
@@ -96,7 +97,20 @@ public class ClientboundPacketHandler {
 					return Collections.singletonList(new ChatPacket(LegacyUtils.fromComponent(packetdata.d())));
 				}
 				case 0x06: { //PacketPlayOutUpdateHealth
-					return Collections.singletonList(new SetHealthPacket((int) packetdata.readFloat()));
+					SetHealthPacket healthPacket = new SetHealthPacket((int) packetdata.readFloat());
+
+					Player bukkitplayer = getPlayer(networkManager).getBukkitEntity();
+					double health = bukkitplayer.getHealth();
+					if (health <= 0) {
+						Location spawnLoc = bukkitplayer.getBedSpawnLocation();
+						if (spawnLoc == null) {
+							spawnLoc = bukkitplayer.getWorld().getSpawnLocation();
+						}
+						RespawnPacket respawn = new RespawnPacket(bukkitplayer.getEntityId(), spawnLoc.getBlockX(), spawnLoc.getBlockY(), spawnLoc.getBlockZ());
+						return Arrays.asList(new ClientboundPEPacket[] { respawn, healthPacket });
+					}
+
+					return Collections.singletonList(healthPacket);
 				}
 				case 0x08: { //PacketlayOutPosition
 					Player player = getPlayer(networkManager).getBukkitEntity();
